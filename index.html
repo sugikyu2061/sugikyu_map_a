@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>気象庁地震情報に用いられる地域区分訪問チェッカー</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+
+body{
+font-family:sans-serif;
+margin:0;
+text-align:center;
+}
+
+h1{
+margin:10px;
+}
+
+#map{
+height:75vh;
+width:100%;
+background:white;
+}
+
+#legend{
+padding:10px;
+}
+
+.legend-item{
+display:inline-block;
+margin:5px 10px;
+}
+
+.color-box{
+display:inline-block;
+width:16px;
+height:16px;
+margin-right:5px;
+vertical-align:middle;
+}
+
+#score{
+font-size:16px;
+font-weight:bold;
+padding:5px;
+}
+
+#counts{
+padding:5px;
+font-size:14px;
+}
+
+footer{
+font-size:12px;
+padding:10px;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>気象庁地震情報に用いられる地域区分訪問チェッカー</h1>
+
+<div id="score"></div>
+
+<div id="legend">
+
+<span class="legend-item"><span class="color-box" style="background:#dddddd"></span>未訪問</span>
+<span class="legend-item"><span class="color-box" style="background:#66ccff"></span>通過</span>
+<span class="legend-item"><span class="color-box" style="background:#00aa00"></span>接地</span>
+<span class="legend-item"><span class="color-box" style="background:#ffd700"></span>訪問</span>
+<span class="legend-item"><span class="color-box" style="background:#ff4444"></span>宿泊</span>
+<span class="legend-item"><span class="color-box" style="background:#ff66cc"></span>居住</span>
+
+</div>
+
+<div id="counts"></div>
+
+<div id="map"></div>
+
+<footer>
+
+<p>
+この地域区分について :<br>
+<a href="https://www.jma.go.jp/jma/kishou/know/jishin/joho/shindo-name.html" target="_blank">
+https://www.jma.go.jp/jma/kishou/know/jishin/joho/shindo-name.html
+</a>
+</p>
+
+<p>
+※本サイトは気象庁とは関係のない個人制作のツールです。
+</p>
+
+<p>
+地図データ：国土地理院
+</p>
+
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+
+var map=L.map('map',{zoomSnap:0.25});
+map.setView([36,138],5);
+
+var states=JSON.parse(localStorage.getItem("shindoStates")||"{}");
+var geoLayer;
+var boundsSet=false;
+
+function getColor(state){
+
+switch(state){
+
+case "未訪問": return "#dddddd";
+case "通過": return "#66ccff";
+case "接地": return "#00aa00";
+case "訪問": return "#ffd700";
+case "宿泊": return "#ff4444";
+case "居住": return "#ff66cc";
+
+default: return "#dddddd";
+
+}
+
+}
+
+function style(feature){
+
+var name=feature.properties["震度地域区分_ちょい改変"];
+
+return{
+fillColor:getColor(states[name]||"未訪問"),
+weight:1,
+color:"#555",
+fillOpacity:0.7
+}
+
+}
+
+function save(){
+localStorage.setItem("shindoStates",JSON.stringify(states));
+}
+
+function updateCounts(){
+
+var counts={
+未訪問:191,
+通過:0,
+接地:0,
+訪問:0,
+宿泊:0,
+居住:0
+};
+
+for(var k in states){
+counts[states[k]]++;
+counts["未訪問"]--;
+}
+
+document.getElementById("counts").innerHTML=
+`未訪問 ${counts.未訪問} /
+通過 ${counts.通過} /
+接地 ${counts.接地} /
+訪問 ${counts.訪問} /
+宿泊 ${counts.宿泊} /
+居住 ${counts.居住}`;
+
+}
+
+function updateScore(){
+
+var points={
+未訪問:0,
+通過:1,
+接地:2,
+訪問:3,
+宿泊:5,
+居住:10
+};
+
+var total=0;
+var visited=0;
+
+for(var k in states){
+
+total+=points[states[k]];
+
+if(states[k]!="未訪問"){
+visited++;
+}
+
+}
+
+var maxScore=188*10;
+var percent=((visited/188)*100).toFixed(1);
+
+document.getElementById("score").innerHTML=
+`総合スコア ${total}`;
+
+}
+
+function popupContent(name){
+
+return `
+<b>${name}</b><br><br>
+
+<label><input type="radio" name="state" value="未訪問">未訪問</label><br>
+<label><input type="radio" name="state" value="通過">通過</label><br>
+<label><input type="radio" name="state" value="接地">接地</label><br>
+<label><input type="radio" name="state" value="訪問">訪問</label><br>
+<label><input type="radio" name="state" value="宿泊">宿泊</label><br>
+<label><input type="radio" name="state" value="居住">居住</label>
+`;
+
+}
+
+fetch("緊急地震速報や震度情報で用いる区域の名称_完成.geojson")
+.then(r=>r.json())
+.then(function(data){
+
+geoLayer=L.geoJSON(data,{
+style:style,
+
+onEachFeature:function(feature,layer){
+
+var name=feature.properties["震度地域区分_ちょい改変"];
+
+layer.on("click",function(){
+
+var popup=L.popup()
+.setLatLng(layer.getBounds().getCenter())
+.setContent(popupContent(name))
+.openOn(map);
+
+document.querySelectorAll("input[name='state']").forEach(function(el){
+
+el.onchange=function(){
+
+states[name]=this.value;
+save();
+
+layer.setStyle({fillColor:getColor(this.value)});
+
+updateCounts();
+updateScore();
+
+map.closePopup();
+
+};
+
+});
+
+});
+
+}
+
+}).addTo(map);
+
+if(!boundsSet){
+map.fitBounds(geoLayer.getBounds());
+boundsSet=true;
+}
+
+updateCounts();
+updateScore();
+
+});
+
+</script>
+
+</body>
+</html>
