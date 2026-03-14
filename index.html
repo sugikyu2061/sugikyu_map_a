@@ -120,6 +120,13 @@ https://www.jma.go.jp/jma/kishou/know/jishin/joho/shindo-name.html
 
 var map=L.map('map',{zoomSnap:0.25});
 map.setView([36,138],5);
+L.tileLayer(
+"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+{
+maxZoom:18,
+attribution:"© OpenStreetMap contributors"
+}
+).addTo(map);
 
 var states=JSON.parse(localStorage.getItem("shindoStates")||"{}");
 var geoLayer;
